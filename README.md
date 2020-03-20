@@ -13,4 +13,4 @@ regression modeling project.
 - Model Results (VIF, R-squared, AIC, BIC, MSE, RMSE, MAE)
 - Validation
 - Reduce Model Complexity
-- Diagnositc Analysis
+- Diagnostic Analysis
