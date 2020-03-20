@@ -1,12 +1,9 @@
-###
-### Regression Analysis on Ames Housing Data
-###
-
+### Regression Analysis on Ames Housing Data ----------
 ## Objective: Perform detailed analysis on Ames Housing Data
 ## to demonstrate ...
 
 ###
-# Load libraries
+# Load libraries --------
 ###
 library(ggplot2)
 library(corrplot)
@@ -29,10 +26,11 @@ library(formattable)
 library(fastDummies)
 library(MASS)
 library(car)
-options(scipen=1000)
+library(olsrr)
+options(scipen=999)
 
 ###
-# Load dataset and create useful variables
+# Load dataset and create useful variables ------
 ###
 
 dat <- read.csv("ames_housing_data.csv", 
@@ -50,7 +48,9 @@ dat$HouseAge <- dat$YrSold - dat$YearBuilt
 dat$QualityIndex <- dat$OverallQual * dat$OverallCond
 dat$logSalePrice <- log(dat$SalePrice)
 
-# Create waterfalls to show the number of operations dropped
+# Create target population --------
+
+# Create waterfalls and show the number of operations dropped
 waterfall1 <- dat %>%
   filter(Zoning %in% c("RH", "RL", "RP", "RM", "FV"))
 
@@ -87,13 +87,15 @@ dat <- dat %>%
     SaleCondition == "Normal",
     TotalFloorSF < 4300)
 
+# Treat Missing Values ------------
+
 # View missing data
 NAcol <- which(colSums(is.na(dat)) > 0)
 sort(colSums(sapply(dat[NAcol], is.na)), decreasing = TRUE)
 
 cat('There are', length(NAcol), 'columns with missing values.')
 
-# If the feature with missing data is not ordinal then it will be set back to factor
+# If the feature with missing data is not ordinal then set back to factor
 
 # Alley missing set to 'None' and set back to factor
 dat$Alley[which(is.na(dat$Alley))] <- "None"
@@ -131,7 +133,8 @@ dat$TotalBsmtSF[which(is.na(dat$TotalBsmtSF))] <- 0
 dat$Fence[which(is.na(dat$Fence))] <- "None"
 dat$Fence <- as.factor(dat$Fence)
 
-# Lot Frontage deserves imputation due to it's importance and relationship with Neighborhood
+# Lot Frontage deserves imputation due to it's importance and 
+# relationship with Neighborhood
 for (i in 1:nrow(dat)){
   if(is.na(dat$LotFrontage[i])){
     dat$LotFrontage[i] <- as.integer(
@@ -189,9 +192,11 @@ to_be_factors <- not_numeric_or_factor[not_numeric_or_factor != "Street"]
 # Make these variables factors
 dat[to_be_factors] <- lapply(dat[to_be_factors], factor)
 
+# Correlation --------
+
 # Search for highly correlated columns
-highlyCor <- colnames(cor_numVar)[findCorrelation(cor_numVar, 
-                                                  cutoff = 0.8, verbose = TRUE)]
+highlyCor <- colnames(cor_numVar)[findCorrelation(
+  cor_numVar, cutoff = 0.8, verbose = TRUE)]
 highlyCor
 
 # It doesn't make sense to remove any of these features
@@ -210,13 +215,19 @@ corrplot.mixed(cor_numVar, tl.col="black",
                tl.pos = "lt", tl.cex = 0.7,
                cl.cex = .7, number.cex=.7)
 
+# Outlier Treatment -----------
+
 # Extreme Outliers for 3 variables
 LotAreaOutliers <- boxplot.stats(dat$LotArea, coef = 3.0)$out
 LotFrontageOutliers <- boxplot.stats(dat$LotFrontage, coef = 3.0)$out
 GarageAreaOutliers <- boxplot.stats(dat$GarageArea, coef = 3.0)$out
 
-sprintf("LotArea has %s outliers, LotFrontage has %s outliers, and GarageArea has %s outliers",
-        length(LotAreaOutliers), length(LotFrontageOutliers), length(GarageAreaOutliers))
+sprintf("LotArea has %s outliers, 
+        LotFrontage has %s outliers, 
+        and GarageArea has %s outliers",
+        length(LotAreaOutliers), 
+        length(LotFrontageOutliers), 
+        length(GarageAreaOutliers))
 
 dat <- dat %>%
   filter(
@@ -232,8 +243,6 @@ mcor <- cor(dat_num)
 corrplot(mcor, method="shade", shade.col=NA, tl.col="black",tl.cex=0.5)
 sprintf("There are %s remaining observations to model", nrow(dat))
 
-#### START ASSIGNMENT7
-
 # List categorical variables
 
 factor_vars <- dat %>%
@@ -244,6 +253,8 @@ factor_vars
 sprintf("There are %s numeric variables and %s categorical variables", 
         length(numericVars), length(factor_vars))
 
+# Deep dive into Neighborhood, Condition1, and Exterior1
+
 ## Examine summary statistics of Neighborhood
 n_mean <- aggregate(SalePrice ~ Neighborhood, data = dat, FUN = mean)
 n_median <- aggregate(SalePrice ~ Neighborhood, data = dat, FUN = median)
@@ -253,7 +264,7 @@ neighborhood_summary <- bind_cols(n_mean, n_median, n_sd)
 neighborhood_summary <- neighborhood_summary %>%
   mutate(Mean = SalePrice,
          Median = SalePrice1,
-         Std = SalePrice2) %>%f
+         Std = SalePrice2) %>%
   dplyr::select(Neighborhood, Mean, Median, Std)
 formattable(neighborhood_summary)
 
@@ -298,6 +309,8 @@ summary(lm(SalePrice ~ Exterior1, data = dat))
 
 dat <- dummy_cols(dat, select_columns = "Exterior1")
 
+# Train/Test split
+
 ## Split into 70/30 train/validation sets
 set.seed(123)
 
@@ -312,7 +325,7 @@ train_test_split <- data.frame(
 )
 formattable(train_test_split)
 
-## Model Identification
+## Automated variable selection ----------
 # Choose 15 predictor variables
 
 # Recalculate correlation for numerical variables
@@ -357,7 +370,8 @@ sqft.lm <- lm(SalePrice ~ TotalSqftCalc, data = train.clean)
 summary(sqft.lm)
 
 # Forward model selection
-forward.lm <- stepAIC(lower.lm, scope = list(upper = formula(upper.lm), lower = ~ 1),
+forward.lm <- stepAIC(lower.lm, 
+                      scope = list(upper = formula(upper.lm), lower = ~ 1),
                       direction = "forward")
 fwd_sum <- summary(forward.lm)
 
@@ -366,7 +380,8 @@ backward.lm <- stepAIC(upper.lm, direction = "backward")
 back_sum <- summary(backward.lm)
 
 # Stepwise model selection
-stepwise.lm <- stepAIC(sqft.lm, scope = list(upper = formula(upper.lm), lower = ~ 1),
+stepwise.lm <- stepAIC(sqft.lm, 
+                       scope = list(upper = formula(upper.lm), lower = ~ 1),
                        direction = "both")
 step_sum <- summary(stepwise.lm)
 
@@ -374,6 +389,8 @@ step_sum <- summary(stepwise.lm)
 junk.lm <- lm(SalePrice ~ OverallQual + OverallCond + QualityIndex +
                 GrLivArea + TotalSqftCalc, data = train.dat)
 junk_sum <- summary(junk.lm)
+
+# Model Results (VIF, R-squared, AIC, BIC, MSE, RMSE, MAE) ---------
 
 # Calculate VIF values from these models
 sort(vif(forward.lm), decreasing=TRUE)
@@ -434,10 +451,9 @@ comp <- data.frame(
   RMSE = RMSE_list,
   MAE = MAE_list
 )
-
 formattable(comp)
 
-# Predict
+# Prediction
 test_forward <- predict(forward.lm, newdata = test.dat)
 test_backwards <- predict(backward.lm, newdata = test.dat)
 test_step <- predict(stepwise.lm, newdata = test.dat)
@@ -451,8 +467,6 @@ test_b_mae <- mean(abs(test.dat$SalePrice - test_backwards))
 test_s_mae <- mean(abs(test.dat$SalePrice - test_step))
 test_j_mae <- mean(abs(test.dat$SalePrice - test_junk))
 
-
-
 test_comp <- data.frame(
   Model = c("Forward", "Backward", "Stepwise", "Junk"),
   TestMSE = c(test_f_mse, test_b_mse, test_s_mse, test_j_mse),
@@ -460,12 +474,12 @@ test_comp <- data.frame(
 )
 formattable(test_comp)
 
-# Operational Validation
+# Validation --------
 
-# Training Data
-# Abs Pct Error
+# Using forward selection model, calculate absolute percent error
 forward_pct <- abs(forward.lm$residuals) / train.clean$SalePrice
-# Assign Prediction Grades;
+
+# Assign Prediction Grades
 forward_PredictionGrade <-
   ifelse(
     forward_pct <= 0.10,
@@ -480,8 +494,7 @@ forward_PredictionGrade <-
 forward_trainTable <- table(forward_PredictionGrade)
 forward_trainTable / sum(forward_trainTable)
 
-# Training Data
-# Abs Pct Error
+# Using junk model for comparison, calculate absolute percent error
 junk_pct <- abs(junk.lm$residuals) / train.clean$SalePrice
 # Assign Prediction Grades
 junk_PredictionGrade <-
@@ -498,8 +511,7 @@ junk_PredictionGrade <-
 junk_trainTable <- table(junk_PredictionGrade)
 junk_trainTable / sum(junk_trainTable)
 
-# Test Data
-# Abs Pct Error
+# Absolute percent error of test set
 forward_testPCT <-
   abs(test.dat$SalePrice - test_forward) / test.dat$SalePrice
 backward_testPCT <-
@@ -527,7 +539,7 @@ forward_testPredictionGrade <-
 forward_testTable <- table(forward_testPredictionGrade)
 forward_testTable / sum(forward_testTable)
 
-# Assign Prediction Grades;
+# Assign Prediction Grades
 junk_testPredictionGrade <-
   ifelse(
     junk_testPCT <= 0.10,
@@ -545,13 +557,12 @@ junk_testPredictionGrade <-
 junk_testTable <- table(junk_testPredictionGrade)
 junk_testTable / sum(junk_testTable)
 
-# Dive deep into final model
-backward.lm <- stepAIC(upper.lm, direction = "backward")
-back_sum <- summary(backward.lm)
+# Reduce model complexity -----------------
 
-reduced1 <- lm(SalePrice ~ OverallQual + TotalSqftCalc + GarageArea + FullBath +
-                 YearBuilt + price_sqft + YearRemodel + TotRmsAbvGrd + Fireplaces +
-                 MasVnrArea + BsmtFinSF1 + LotArea + OpenPorchSF, data = dat)
+reduced1 <- lm(SalePrice ~ OverallQual + TotalSqftCalc + GarageArea + 
+                 FullBath + YearBuilt + price_sqft + YearRemodel +
+                 TotRmsAbvGrd + Fireplaces + MasVnrArea + BsmtFinSF1 +
+                 LotArea + OpenPorchSF, data = dat)
 summary(reduced1)
 
 train.clean %>%
@@ -561,15 +572,14 @@ train.clean %>%
   facet_wrap(~ var, scales = "free") +
   theme_bw()
 
-reduced2 <- lm(SalePrice ~ OverallQual + TotalSqftCalc + GarageArea + FullBath +
-                 YearBuilt + price_sqft + YearRemodel + TotRmsAbvGrd + Fireplaces +
-                 MasVnrArea + LotArea + OpenPorchSF, data = dat)
+reduced2 <- lm(SalePrice ~ OverallQual + TotalSqftCalc + GarageArea +
+                 FullBath + YearBuilt + price_sqft + YearRemodel +
+                 TotRmsAbvGrd + Fireplaces + MasVnrArea + LotArea + 
+                 OpenPorchSF, data = dat)
 summary(reduced2)
 desc2 <- "Removed BsmtFinSF1"
 coeff2 <- nrow(summary(reduced2)$coefficients) - 1
 adjr2 <- summary(reduced2)$adj.r.squared
-
-# Analysis by removing variables
 
 # Remove YearBuilt
 reduced3 <- lm(SalePrice ~ OverallQual + TotalSqftCalc + GarageArea + FullBath +
@@ -651,15 +661,19 @@ adjr10 <- summary(reduced10)$adj.r.squared
 
 
 # Display results
-descriptions <- c(desc2, desc3, desc4, desc5, desc6, desc7, desc8, desc9, desc10)
-coef_count <- c(coeff2, coeff3, coeff4, coeff5, coeff6, coeff7, coeff8, coeff9, coeff10)
-adjrs <- c(adjr2, adjr3, adjr4, adjr5, adjr6, adjr7, adjr8, adjr9, adjr10)
+descriptions <- c(desc2, desc3, desc4, desc5, desc6,
+                  desc7, desc8, desc9, desc10)
+coef_count <- c(coeff2, coeff3, coeff4, coeff5, coeff6,
+                coeff7, coeff8, coeff9, coeff10)
+adjrs <- c(adjr2, adjr3, adjr4, adjr5, adjr6, 
+           adjr7, adjr8, adjr9, adjr10)
 removal_sum <- cbind.data.frame(descriptions, coef_count, adjrs)
 
 formattable(removal_sum)
 
-# Move on with Reduced9
+# Diagnostic analysis -----------
 
+# Using Reduced9
 enhanced_hist <- function(x, title_alias) {
   par(mfrow=c(1, 2))
   skew <- round(moments::skewness(x), digits = 3)
@@ -738,11 +752,11 @@ dfits_thresh <- (2 * sqrt(length(reduced9$coefficients))) / length(reduced9$resi
 plot(dffits(reduced9), 
      ylab = "Standardized DFITS", xlab = "Index", 
      main = paste("Standardized DfFits, \n critical value = 0.005 = +/-", round(dfits_thresh,3)))
-
-#Critical Value horizontal lines
 abline(h = dfits_thresh, lty = 2,col="red")
 abline(h = -dfits_thresh, lty = 2, col="red")
-
 textxy(as.numeric(names(dffits(model_4)[which(dffits(model_4) < -dfits_thresh | dffits(model_4) > dfits_thresh)])), 
        dffits(model_4)[which(dffits(model_4) < -dfits_thresh | dffits(model_4) > dfits_thresh)], 
        as.numeric(names(dffits(model_4)[which(dffits(model_4) < -dfits_thresh | dffits(model_4) > dfits_thresh)])), cex=0.7,offset = -1)
+
+# Another view of dffits
+ols_plot_dffits(reduced9)
